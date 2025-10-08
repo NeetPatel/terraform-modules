@@ -494,69 +494,6 @@ variable "eks_tags" {
   default     = {}
 }
 
-# Karpenter Configuration
-variable "eks_enable_karpenter" {
-  description = "Enable Karpenter autoscaler"
-  type        = bool
-  default     = true
-}
-
-variable "eks_karpenter_version" {
-  description = "Karpenter version to deploy"
-  type        = string
-  default     = "0.37.0"
-}
-
-variable "eks_karpenter_nodepools" {
-  description = "Map of Karpenter NodePools"
-  type = map(object({
-    instance_types            = list(string)
-    capacity_type             = optional(string, "spot")
-    min_capacity              = optional(number, 0)
-    max_capacity              = optional(number, 100)
-    ttl_seconds_after_empty   = optional(number, 30)
-    ttl_seconds_until_expired = optional(number, 2592000) # 30 days
-    labels                    = optional(map(string), {})
-    taints = optional(list(object({
-      key    = string
-      value  = string
-      effect = string
-    })), [])
-    requirements = optional(list(object({
-      key      = string
-      operator = string
-      values   = list(string)
-    })), [])
-  }))
-  default = {
-    default = {
-      instance_types            = ["t3a.medium", "t3a.large", "t3a.xlarge"]
-      capacity_type             = "spot"
-      min_capacity              = 0
-      max_capacity              = 100
-      ttl_seconds_after_empty   = 30
-      ttl_seconds_until_expired = 2592000
-      labels = {
-        Environment = "pre-prod"
-        NodeType    = "karpenter"
-      }
-      taints = []
-      requirements = [
-        {
-          key      = "kubernetes.io/arch"
-          operator = "In"
-          values   = ["amd64"]
-        },
-        {
-          key      = "karpenter.sh/capacity-type"
-          operator = "In"
-          values   = ["spot"]
-        }
-      ]
-    }
-  }
-}
-
 # VPN Configuration
 variable "vpn_enable" {
   description = "Enable VPN server deployment"

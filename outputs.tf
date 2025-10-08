@@ -332,56 +332,6 @@ output "eks_cloudwatch_log_group_arn" {
   value       = module.eks_cluster.cloudwatch_log_group_arn
 }
 
-# Karpenter Outputs
-output "karpenter_iam_role_arn" {
-  description = "ARN of the Karpenter IAM role"
-  value       = module.eks_cluster.karpenter_iam_role_arn
-}
-
-output "karpenter_instance_profile_name" {
-  description = "Name of the Karpenter instance profile"
-  value       = module.eks_cluster.karpenter_instance_profile_name
-}
-
-output "karpenter_sqs_queue_arn" {
-  description = "ARN of the Karpenter SQS queue"
-  value       = module.eks_cluster.karpenter_sqs_queue_arn
-}
-
-output "karpenter_sqs_queue_url" {
-  description = "URL of the Karpenter SQS queue"
-  value       = module.eks_cluster.karpenter_sqs_queue_url
-}
-
-output "karpenter_eventbridge_rule_arn" {
-  description = "ARN of the Karpenter EventBridge rule"
-  value       = module.eks_cluster.karpenter_eventbridge_rule_arn
-}
-
-output "karpenter_nodepools" {
-  description = "Map of Karpenter NodePools"
-  value       = module.eks_cluster.karpenter_nodepools
-}
-
-output "karpenter_helm_release_name" {
-  description = "Name of the Karpenter Helm release"
-  value       = module.eks_cluster.karpenter_helm_release_name
-}
-
-output "karpenter_helm_release_version" {
-  description = "Version of the Karpenter Helm release"
-  value       = module.eks_cluster.karpenter_helm_release_version
-}
-
-output "karpenter_helm_release_namespace" {
-  description = "Namespace of the Karpenter Helm release"
-  value       = module.eks_cluster.karpenter_helm_release_namespace
-}
-
-output "karpenter_commands" {
-  description = "Commands to manage Karpenter"
-  value       = module.eks_cluster.karpenter_commands
-}
 
 # External DNS Outputs
 output "external_dns_iam_role_arn" {

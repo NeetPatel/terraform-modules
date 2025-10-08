@@ -1,6 +1,6 @@
 # DevOps Infrastructure with Terraform
 
-This Terraform configuration provisions a comprehensive AWS infrastructure including EC2 instances, VPC, S3 buckets with CloudFront CDN, Aurora MySQL Serverless database, ECR repositories, EKS cluster with Karpenter autoscaler, Route53 DNS management, External DNS integration, and **advanced security controls** with enterprise-grade security practices and modular design.
+This Terraform configuration provisions a comprehensive AWS infrastructure including EC2 instances, VPC, S3 buckets with CloudFront CDN, Aurora MySQL Serverless database, ECR repositories, EKS cluster with ALB, Route53 DNS management, External DNS integration, and **advanced security controls** with enterprise-grade security practices and modular design.
 
 ## 🏆 **Security Rating: 9.5/10** - Production Ready
 
@@ -11,7 +11,7 @@ This Terraform configuration provisions a comprehensive AWS infrastructure inclu
 - **S3 Storage**: Multiple S3 buckets with CloudFront CDN distributions
 - **Aurora Database**: MySQL Serverless v2 with automatic scaling and encryption
 - **ECR Repositories**: Multiple container registries with lifecycle policies
-- **EKS Cluster**: Kubernetes cluster with Karpenter autoscaler and ALB
+- **EKS Cluster**: Kubernetes cluster with ALB
 - **Route53 DNS**: Hosted zones for domain management and DNS records
 - **External DNS**: Automatic DNS record management for Kubernetes services
 - **Advanced Security**: GuardDuty, WAF, SSL/TLS certificates, VPC Flow Logs, Security Hub, AWS Config
@@ -105,8 +105,7 @@ This Terraform configuration provisions a comprehensive AWS infrastructure inclu
     │   ├── main.tf
     │   ├── variables.tf
     │   ├── outputs.tf
-    │   ├── versions.tf
-    │   └── karpenter-userdata.sh
+    │   └── versions.tf
     ├── vpn-ec2/               # VPN EC2 instance module
     │   ├── main.tf
     │   ├── variables.tf
@@ -234,8 +233,6 @@ This Terraform configuration provisions a comprehensive AWS infrastructure inclu
    # Verify cluster access
    kubectl get nodes
    
-   # Check Karpenter status
-   kubectl get pods -n karpenter
    
    # Check NodePools
    kubectl get nodepools
@@ -249,7 +246,6 @@ This Terraform configuration provisions a comprehensive AWS infrastructure inclu
     # Scale the deployment
     kubectl scale deployment nginx --replicas=5
     
-    # Watch Karpenter provision nodes
     kubectl get nodes -w
     ```
 
@@ -351,13 +347,9 @@ This Terraform configuration provisions a comprehensive AWS infrastructure inclu
 | `eks_alb_target_groups` | ALB target groups | `{}` |
 | `eks_alb_listeners` | ALB listeners | `{}` |
 
-### Karpenter Configuration
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `eks_enable_karpenter` | Enable Karpenter autoscaler | `true` |
-| `eks_karpenter_version` | Karpenter version | `"0.37.0"` |
-| `eks_karpenter_nodepools` | Map of Karpenter NodePools | `{}` |
 
 ### External DNS Configuration
 
@@ -526,11 +518,7 @@ eks_enable_waf = true
 eks_waf_web_acl_arn = null
 eks_tags = {}
 
-# Karpenter Configuration
-eks_enable_karpenter = true
-eks_karpenter_version = "0.37.0"
 
-eks_karpenter_nodepools = {
   default = {
     instance_types = ["t3.medium", "t3.large", "t3.xlarge"]
     capacity_type  = "spot"
@@ -540,7 +528,6 @@ eks_karpenter_nodepools = {
     ttl_seconds_until_expired = 2592000
     labels = {
       Environment = "pre-prod"
-      NodeType    = "karpenter"
     }
     taints = []
     requirements = [
@@ -550,7 +537,6 @@ eks_karpenter_nodepools = {
         values   = ["amd64"]
       },
       {
-        key      = "karpenter.sh/capacity-type"
         operator = "In"
         values   = ["spot"]
       }
@@ -655,17 +641,6 @@ After deployment, Terraform will output:
 - `eks_cloudwatch_log_group_name`: CloudWatch log group name
 - `eks_cloudwatch_log_group_arn`: CloudWatch log group ARN
 
-### Karpenter Outputs
-- `karpenter_iam_role_arn`: Karpenter IAM role ARN
-- `karpenter_instance_profile_name`: Karpenter instance profile name
-- `karpenter_sqs_queue_arn`: Karpenter SQS queue ARN
-- `karpenter_sqs_queue_url`: Karpenter SQS queue URL
-- `karpenter_eventbridge_rule_arn`: Karpenter EventBridge rule ARN
-- `karpenter_nodepools`: Karpenter NodePools
-- `karpenter_helm_release_name`: Karpenter Helm release name
-- `karpenter_helm_release_version`: Karpenter Helm release version
-- `karpenter_helm_release_namespace`: Karpenter Helm release namespace
-- `karpenter_commands`: Karpenter management commands
 
 ### External DNS Outputs
 - `external_dns_iam_role_arn`: External DNS IAM role ARN
@@ -800,10 +775,6 @@ module "my_eks" {
   alb_scheme        = "internet-facing"
   alb_type          = "application"
   
-  # Karpenter Configuration
-  enable_karpenter     = true
-  karpenter_version     = "0.37.0"
-  karpenter_nodepools   = {
     default = {
       instance_types = ["t3.medium", "t3.large", "t3.xlarge"]
       capacity_type  = "spot"
@@ -811,7 +782,6 @@ module "my_eks" {
       max_capacity   = 100
       labels = {
         Environment = "prod"
-        NodeType    = "karpenter"
       }
       taints = []
     }
@@ -868,7 +838,6 @@ The infrastructure includes **enterprise-grade security features** with a **9.5/
 - **Network Policies**: Pod-to-pod communication control
 - **RBAC**: Role-based access control
 - **Security Groups**: Node-level network security
-- **Karpenter Security**: Secure node provisioning with IAM roles
 - **External DNS Security**: Secure DNS record management with IAM roles
 
 ### 🌍 **DNS Security**
@@ -930,7 +899,6 @@ terraform destroy
 7. **ECR Push Failures**: Verify ECR login and repository permissions
 8. **CloudFront Not Working**: Check Origin Access Control and bucket policies
 9. **EKS Cluster Access**: Verify kubectl configuration and IAM permissions
-10. **Karpenter Not Scaling**: Check NodePools, IAM roles, and SQS queue configuration
 11. **ALB Not Working**: Verify target groups, listeners, and security groups
 12. **Pod Scheduling Issues**: Check node capacity, taints, and tolerations
 13. **External DNS Not Working**: Check IAM roles, hosted zones, and annotations
@@ -952,11 +920,9 @@ terraform destroy
 - Verify S3 bucket policies: `aws s3api get-bucket-policy --bucket <bucket-name>`
 - Test ECR access: `aws ecr describe-repositories --repository-names <repo-name>`
 - Check EKS cluster: `aws eks describe-cluster --name <cluster-name>`
-- Verify Karpenter: `kubectl get pods -n karpenter`
 - Check NodePools: `kubectl get nodepools`
 - Monitor ALB: `aws elbv2 describe-load-balancers --names <alb-name>`
 - Check node status: `kubectl get nodes -o wide`
-- View Karpenter logs: `kubectl logs -n karpenter -l app.kubernetes.io/name=karpenter`
 - Check External DNS: `kubectl get pods -n external-dns`
 - View External DNS logs: `kubectl logs -n external-dns -l app.kubernetes.io/name=external-dns`
 - Check Route53 zones: `aws route53 list-hosted-zones`
@@ -1061,135 +1027,3 @@ route53_hosted_zones = {
    nslookup api.example.com
    ```
 
-## 🚀 Karpenter Auto-Scaling
-
-### What is Karpenter?
-
-Karpenter is AWS's next-generation autoscaler that provides better cost optimization and faster scaling than traditional Cluster Autoscaler. It automatically provisions the right compute resources to handle your pods' requirements.
-
-### Key Benefits
-
-#### 💰 Cost Optimization
-- **Spot Instances**: Up to 90% cost savings with spot instances
-- **Scale to Zero**: No idle nodes running
-- **Right-sizing**: Automatically selects optimal instance types
-- **Fast Scaling**: Sub-minute node provisioning
-
-#### ⚡ Performance Features
-- **Pod-Driven Scaling**: Automatic node provisioning based on pod requirements
-- **Multi-Instance Types**: Flexible instance selection from multiple families
-- **Interruption Handling**: Graceful spot instance termination
-- **Consolidation**: Automatic node consolidation for efficiency
-
-#### 🔧 Operational Benefits
-- **No Manual Scaling**: Fully automated node management
-- **Resource Efficiency**: Better resource utilization
-- **Fault Tolerance**: Automatic node replacement
-- **Cost Visibility**: Detailed cost tracking and optimization
-
-### Karpenter Configuration
-
-The infrastructure includes a default Karpenter NodePool configured for:
-
-```hcl
-eks_karpenter_nodepools = {
-  default = {
-    instance_types = ["t3.medium", "t3.large", "t3.xlarge"]
-    capacity_type  = "spot"  # Cost-optimized spot instances
-    min_capacity   = 0       # Scale to zero
-    max_capacity   = 100     # Scale up to 100 nodes
-    ttl_seconds_after_empty = 30      # Remove empty nodes after 30s
-    ttl_seconds_until_expired = 2592000  # Expire nodes after 30 days
-    labels = {
-      Environment = "pre-prod"
-      NodeType    = "karpenter"
-    }
-    taints = []
-    requirements = [
-      {
-        key      = "kubernetes.io/arch"
-        operator = "In"
-        values   = ["amd64"]
-      },
-      {
-        key      = "karpenter.sh/capacity-type"
-        operator = "In"
-        values   = ["spot"]
-      }
-    ]
-  }
-}
-```
-
-### Auto-Scaling Behavior
-
-#### Scale Up Triggers
-- Pods can't be scheduled (insufficient resources)
-- New workloads requiring specific instance types
-- High resource demand
-
-#### Scale Down Triggers
-- Nodes underutilized for 30+ seconds
-- Empty nodes for 30+ seconds
-- Cost optimization opportunities
-
-#### Instance Selection
-- **Primary**: t3.medium, t3.large, t3.xlarge
-- **Capacity Type**: Spot instances (cost-optimized)
-- **Architecture**: AMD64
-- **Auto-selection**: Best price/performance ratio
-
-### Karpenter Management Commands
-
-```bash
-# Check Karpenter status
-kubectl get pods -n karpenter
-
-# Check NodePools
-kubectl get nodepools
-
-# Check Karpenter-managed nodes
-kubectl get nodes -l karpenter.sh/provisioner-name
-
-# Check Karpenter logs
-kubectl logs -n karpenter -l app.kubernetes.io/name=karpenter
-
-# Watch node provisioning
-kubectl get nodes -w
-
-# Check node events
-kubectl get events --sort-by='.lastTimestamp'
-
-# Scale a deployment to trigger Karpenter
-kubectl scale deployment nginx --replicas=10
-
-# Check node utilization
-kubectl top nodes
-```
-
-## 💰 **Security Investment Summary**
-
-### **Monthly Security Costs (Estimated)**
-- **GuardDuty**: $25-40/month (comprehensive threat detection)
-- **WAF**: $5-15/month (web application firewall)
-- **CloudTrail**: $2-5/month (API audit logging)
-- **Security Hub**: $10-20/month (centralized findings)
-- **AWS Config**: $2-5/month (compliance monitoring)
-- **ACM Certificates**: $0/month (free SSL certificates)
-- **VPC Flow Logs**: $5-10/month (network monitoring)
-
-### **Total Security Investment: ~$49-95/month**
-
-### **Security ROI**
-- **Automated Threat Detection**: 24/7 monitoring
-- **Compliance Ready**: Meets enterprise requirements
-- **Incident Response**: Faster detection and response
-- **Risk Reduction**: Proactive security posture
-- **Cost Savings**: Reduces manual security monitoring costs
-
-**This security investment provides enterprise-grade protection at a fraction of the cost of manual security operations.**
-
-## 📄 License
-
-This project is provided as-is for educational and dev use. Please review and customize according to your security requirements.
-# terraform-modules

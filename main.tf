@@ -152,11 +152,6 @@ module "eks_cluster" {
   waf_web_acl_arn     = var.eks_enable_waf && var.security_enable ? module.security[0].waf_web_acl_arn : var.eks_waf_web_acl_arn
   ssl_certificate_arn = var.security_enable ? module.security[0].acm_certificate_arn : null
 
-  # Karpenter Configuration
-  enable_karpenter    = var.eks_enable_karpenter
-  karpenter_version   = var.eks_karpenter_version
-  karpenter_nodepools = var.eks_karpenter_nodepools
-
   # External DNS Configuration
   enable_external_dns            = var.eks_enable_external_dns
   external_dns_version           = var.eks_external_dns_version
@@ -187,7 +182,6 @@ module "vpn_server" {
   subnet_id = module.vpc.public_subnet_ids[0]
 
   # Instance Configuration
-  ami_id        = var.ami_id
   instance_type = var.vpn_instance_type
   volume_size   = var.vpn_volume_size
 

@@ -14,22 +14,6 @@ terraform {
   }
 }
 
-# Data sources
-data "aws_ami" "ubuntu" {
-  most_recent = true
-  owners      = ["099720109477"] # Canonical
-
-  filter {
-    name   = "name"
-    values = ["ubuntu/images/hvm-ssd/ubuntu-22.04-lts-amd64-server-*"]
-  }
-
-  filter {
-    name   = "virtualization-type"
-    values = ["hvm"]
-  }
-}
-
 # Generate random password for OpenVPN
 resource "random_password" "openvpn_password" {
   length  = 16
@@ -129,7 +113,7 @@ resource "aws_key_pair" "vpn_key" {
 
 # EC2 Instance for VPN Server
 resource "aws_instance" "vpn_server" {
-  ami                    = var.ami_id != "" ? var.ami_id : data.aws_ami.ubuntu.id
+  ami                    = var.ami_id != "" ? var.ami_id : "ami-07a3add10195338ad"  # Ubuntu 22.04 LTS us-east-1
   instance_type          = var.instance_type
   key_name              = aws_key_pair.vpn_key.key_name
   vpc_security_group_ids = [aws_security_group.vpn_sg.id]
