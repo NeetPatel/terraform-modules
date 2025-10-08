@@ -147,9 +147,10 @@ module "eks_cluster" {
   alb_listeners     = var.eks_alb_listeners
 
   # Security Configuration
-  allowed_cidrs   = var.eks_allowed_cidrs
-  enable_waf      = var.eks_enable_waf
-  waf_web_acl_arn = var.eks_waf_web_acl_arn
+  allowed_cidrs       = var.eks_allowed_cidrs
+  enable_waf          = var.eks_enable_waf
+  waf_web_acl_arn     = var.eks_enable_waf && var.security_enable ? module.security[0].waf_web_acl_arn : var.eks_waf_web_acl_arn
+  ssl_certificate_arn = var.security_enable ? module.security[0].acm_certificate_arn : null
 
   # Karpenter Configuration
   enable_karpenter    = var.eks_enable_karpenter
@@ -218,4 +219,25 @@ module "route53" {
 
   # Tags
   tags = var.route53_tags
+}
+
+# Advanced Security Controls
+module "security" {
+  count = var.security_enable ? 1 : 0
+
+  source = "./modules/security"
+
+  project_name = var.project_name
+  environment  = var.environment
+  aws_region   = var.aws_region
+
+  # VPC Configuration
+  vpc_id = module.vpc.vpc_id
+
+  # SSL Certificate Configuration
+  domain_name               = var.security_domain_name
+  subject_alternative_names = var.security_subject_alternative_names
+
+  # Tags
+  tags = var.security_tags
 }

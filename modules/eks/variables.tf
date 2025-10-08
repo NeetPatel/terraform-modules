@@ -255,6 +255,12 @@ variable "waf_web_acl_arn" {
   default     = null
 }
 
+variable "ssl_certificate_arn" {
+  description = "ARN of SSL certificate for HTTPS listener"
+  type        = string
+  default     = null
+}
+
 # Karpenter Configuration
 variable "enable_karpenter" {
   description = "Enable Karpenter autoscaler"

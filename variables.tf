@@ -704,3 +704,28 @@ variable "route53_tags" {
   type        = map(string)
   default     = {}
 }
+
+# Security Configuration
+variable "security_enable" {
+  description = "Enable advanced security controls"
+  type        = bool
+  default     = true
+}
+
+variable "security_domain_name" {
+  description = "Domain name for SSL certificate"
+  type        = string
+  default     = "example.com"
+}
+
+variable "security_subject_alternative_names" {
+  description = "Subject alternative names for SSL certificate"
+  type        = list(string)
+  default     = ["*.example.com"]
+}
+
+variable "security_tags" {
+  description = "Additional tags for security resources"
+  type        = map(string)
+  default     = {}
+}

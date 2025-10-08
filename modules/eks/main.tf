@@ -302,7 +302,7 @@ resource "aws_lb_listener" "listeners" {
   protocol          = each.value.protocol
 
   ssl_policy      = each.value.ssl_policy
-  certificate_arn = each.value.certificate_arn
+  certificate_arn = each.value.certificate_arn != null ? each.value.certificate_arn : var.ssl_certificate_arn
 
   default_action {
     type = each.value.default_action.type

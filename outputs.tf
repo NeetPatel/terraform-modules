@@ -530,3 +530,44 @@ output "route53_dns_commands" {
   description = "Commands to manage DNS"
   value       = var.route53_enable ? module.route53[0].dns_commands : null
 }
+
+# Security Outputs
+output "security_cloudtrail_arn" {
+  description = "ARN of the CloudTrail"
+  value       = var.security_enable ? module.security[0].cloudtrail_arn : null
+}
+
+output "security_guardduty_detector_id" {
+  description = "ID of the GuardDuty detector"
+  value       = var.security_enable ? module.security[0].guardduty_detector_id : null
+}
+
+output "security_security_hub_arn" {
+  description = "ARN of the Security Hub"
+  value       = var.security_enable ? module.security[0].security_hub_arn : null
+}
+
+output "security_config_recorder_name" {
+  description = "Name of the Config recorder"
+  value       = var.security_enable ? module.security[0].config_recorder_name : null
+}
+
+output "security_waf_web_acl_arn" {
+  description = "ARN of the WAF Web ACL"
+  value       = var.security_enable ? module.security[0].waf_web_acl_arn : null
+}
+
+output "security_acm_certificate_arn" {
+  description = "ARN of the ACM certificate"
+  value       = var.security_enable ? module.security[0].acm_certificate_arn : null
+}
+
+output "security_vpc_flow_log_id" {
+  description = "ID of the VPC flow log"
+  value       = var.security_enable ? module.security[0].vpc_flow_log_id : null
+}
+
+output "security_commands" {
+  description = "Commands to manage security services"
+  value       = var.security_enable ? module.security[0].security_commands : null
+}

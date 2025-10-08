@@ -59,13 +59,36 @@ resource "aws_security_group" "ec2_sg" {
     }
   }
 
-  # Privileged access rules - additional ports for specific IPs
+  # Privileged access rules - specific ports for VPN access
   dynamic "ingress" {
     for_each = var.privileged_access_cidrs
     content {
-      description = "Privileged Access - All Ports"
-      from_port   = 0
-      to_port     = 65535
+      description = "Privileged Access - SSH"
+      from_port   = 22
+      to_port     = 22
+      protocol    = "tcp"
+      cidr_blocks = [ingress.value]
+    }
+  }
+
+  # Additional privileged ports for specific services
+  dynamic "ingress" {
+    for_each = var.privileged_access_cidrs
+    content {
+      description = "Privileged Access - HTTPS"
+      from_port   = 443
+      to_port     = 443
+      protocol    = "tcp"
+      cidr_blocks = [ingress.value]
+    }
+  }
+
+  dynamic "ingress" {
+    for_each = var.privileged_access_cidrs
+    content {
+      description = "Privileged Access - HTTP"
+      from_port   = 80
+      to_port     = 80
       protocol    = "tcp"
       cidr_blocks = [ingress.value]
     }
