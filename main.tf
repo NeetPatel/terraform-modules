@@ -2,12 +2,34 @@ provider "aws" {
   region = var.aws_region
 }
 
+# Data Sources
+data "aws_caller_identity" "current" {}
+
+# KMS Key for Secrets Manager
+resource "aws_kms_key" "secrets" {
+  description             = "KMS key for Secrets Manager encryption"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+
+  tags = {
+    Name        = "${var.project_name}-${var.environment}-secrets-kms"
+    Environment = var.environment
+    Project     = var.project_name
+  }
+}
+
+resource "aws_kms_alias" "secrets" {
+  name          = "alias/${var.project_name}-${var.environment}-secrets"
+  target_key_id = aws_kms_key.secrets.key_id
+}
+
 # Store EC2 private key in AWS Secrets Manager (only if using generated key)
 resource "aws_secretsmanager_secret" "ssh_private_key" {
   count                   = length(var.public_ssh_keys) == 0 ? 1 : 0
   name                    = "${var.project_name}-ec2-ssh-private-key"
   description             = "Private key for EC2 instance SSH access"
   recovery_window_in_days = 7
+  kms_key_id              = aws_kms_key.secrets.arn
 }
 
 resource "aws_secretsmanager_secret_version" "ssh_private_key" {
@@ -234,4 +256,27 @@ module "security" {
 
   # Tags
   tags = var.security_tags
+}
+
+# Developer Readonly Access Module
+module "developer_access" {
+  source = "./modules/developer-access"
+
+  # Basic Configuration
+  project_name = var.project_name
+  environment  = var.environment
+
+  # Developer Configuration
+  developer_users   = var.developer_users
+  developer_groups  = var.developer_groups
+  allowed_ip_ranges = var.developer_allowed_ip_ranges
+
+  # Service Configuration
+  eks_cluster_name          = module.eks_cluster.cluster_name
+  aurora_cluster_identifier = module.aurora_mysql.cluster_id
+  s3_bucket_arns            = values(module.s3_storage.bucket_arns)
+  ecr_repository_arns       = values(module.ecr_repositories.repository_arns)
+
+  # Tags
+  tags = {}
 }

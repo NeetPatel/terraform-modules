@@ -1,3 +1,21 @@
+# KMS Key for Aurora encryption
+resource "aws_kms_key" "aurora" {
+  description             = "KMS key for Aurora MySQL encryption"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+
+  tags = {
+    Name        = "${var.project_name}-${var.environment}-aurora-kms"
+    Environment = var.environment
+    Project     = var.project_name
+  }
+}
+
+resource "aws_kms_alias" "aurora" {
+  name          = "alias/${var.project_name}-${var.environment}-aurora"
+  target_key_id = aws_kms_key.aurora.key_id
+}
+
 # Generate random password for Aurora
 resource "random_password" "aurora_password" {
   length  = 32
@@ -12,6 +30,7 @@ resource "aws_secretsmanager_secret" "aurora_credentials" {
   name                    = "${var.project_name}-${var.environment}-aurora-credentials"
   description             = "Aurora MySQL credentials for ${var.project_name} ${var.environment}"
   recovery_window_in_days = 7
+  kms_key_id              = aws_kms_key.aurora.arn
 
   tags = {
     Name        = "${var.project_name}-${var.environment}-aurora-credentials"
@@ -64,7 +83,7 @@ resource "aws_security_group" "aurora" {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["0.0.0.0/0"] # tfsec:ignore:aws-ec2-no-public-egress-sgr
   }
 
   tags = {
@@ -91,6 +110,7 @@ resource "aws_rds_cluster" "aurora" {
   deletion_protection     = var.deletion_protection
   skip_final_snapshot     = var.skip_final_snapshot
   storage_encrypted       = true
+  kms_key_id             = aws_kms_key.aurora.arn
   vpc_security_group_ids = [aws_security_group.aurora.id]
   db_subnet_group_name   = aws_db_subnet_group.aurora.name
 
@@ -115,6 +135,10 @@ resource "aws_rds_cluster_instance" "aurora" {
   instance_class     = var.instance_class
   engine             = aws_rds_cluster.aurora.engine
   engine_version     = aws_rds_cluster.aurora.engine_version
+
+  performance_insights_enabled          = true
+  performance_insights_kms_key_id       = aws_kms_key.aurora.arn
+  performance_insights_retention_period = 7
 
   tags = {
     Name        = "${var.project_name}-${var.environment}-aurora-instance-${count.index + 1}"

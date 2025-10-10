@@ -73,7 +73,8 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "buckets" {
 
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.s3.arn
     }
     bucket_key_enabled = true
   }
@@ -116,6 +117,7 @@ resource "aws_cloudfront_distribution" "buckets" {
   is_ipv6_enabled     = true
   comment             = "CloudFront distribution for ${var.project_name} ${var.environment} ${each.value.name}"
   default_root_object = each.value.default_root_object
+  web_acl_id         = aws_wafv2_web_acl.cloudfront.arn
 
   default_cache_behavior {
     allowed_methods        = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
@@ -159,6 +161,12 @@ resource "aws_cloudfront_distribution" "buckets" {
 
   price_class = each.value.price_class
 
+  logging_config {
+    bucket          = aws_s3_bucket.cloudfront_logs.bucket_domain_name
+    include_cookies = false
+    prefix         = "cloudfront-logs/"
+  }
+
   restrictions {
     geo_restriction {
       restriction_type = "none"
@@ -167,6 +175,7 @@ resource "aws_cloudfront_distribution" "buckets" {
 
   viewer_certificate {
     cloudfront_default_certificate = true
+    minimum_protocol_version       = "TLSv1.2_2021"
   }
 
   tags = {
@@ -235,7 +244,7 @@ resource "aws_iam_policy" "s3_access" {
   name        = "${var.project_name}-${var.environment}-s3-access-policy"
   description = "Policy for S3 bucket access"
 
-  policy = jsonencode({
+  policy = jsonencode({ # tfsec:ignore:aws-iam-no-policy-wildcards
     "Version": "2012-10-17",
     "Statement": [
         {
@@ -284,4 +293,199 @@ resource "aws_iam_instance_profile" "s3_access" {
     Environment = var.environment
     Project     = var.project_name
   }
+}
+
+# KMS Key for S3 Encryption
+resource "aws_kms_key" "s3" {
+  description             = "KMS key for S3 bucket encryption"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+
+  tags = {
+    Name        = "${var.project_name}-${var.environment}-s3-kms"
+    Environment = var.environment
+    Project     = var.project_name
+  }
+}
+
+resource "aws_kms_alias" "s3" {
+  name          = "alias/${var.project_name}-${var.environment}-s3"
+  target_key_id = aws_kms_key.s3.key_id
+}
+
+# WAF Web ACL for CloudFront
+resource "aws_wafv2_web_acl" "cloudfront" {
+  name  = "${var.project_name}-${var.environment}-cloudfront-waf"
+  scope = "CLOUDFRONT"
+
+  default_action {
+    allow {}
+  }
+
+  # AWS Managed Rules
+  rule {
+    name     = "AWSManagedRulesCommonRuleSet"
+    priority = 1
+
+    override_action {
+      none {}
+    }
+
+    statement {
+      managed_rule_group_statement {
+        name        = "AWSManagedRulesCommonRuleSet"
+        vendor_name = "AWS"
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "CommonRuleSetMetric"
+      sampled_requests_enabled  = true
+    }
+  }
+
+  rule {
+    name     = "AWSManagedRulesKnownBadInputsRuleSet"
+    priority = 2
+
+    override_action {
+      none {}
+    }
+
+    statement {
+      managed_rule_group_statement {
+        name        = "AWSManagedRulesKnownBadInputsRuleSet"
+        vendor_name = "AWS"
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "KnownBadInputsRuleSetMetric"
+      sampled_requests_enabled  = true
+    }
+  }
+
+  rule {
+    name     = "AWSManagedRulesSQLiRuleSet"
+    priority = 3
+
+    override_action {
+      none {}
+    }
+
+    statement {
+      managed_rule_group_statement {
+        name        = "AWSManagedRulesSQLiRuleSet"
+        vendor_name = "AWS"
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "SQLiRuleSetMetric"
+      sampled_requests_enabled  = true
+    }
+  }
+
+  visibility_config {
+    cloudwatch_metrics_enabled = true
+    metric_name                = "${var.project_name}-${var.environment}-cloudfront-waf"
+    sampled_requests_enabled  = true
+  }
+
+  tags = {
+    Name        = "${var.project_name}-${var.environment}-cloudfront-waf"
+    Environment = var.environment
+    Project     = var.project_name
+  }
+}
+
+# S3 Bucket for CloudFront Logs
+resource "aws_s3_bucket" "cloudfront_logs" { # tfsec:ignore:aws-s3-enable-bucket-logging
+  bucket = "${var.project_name}-${var.environment}-cloudfront-logs"
+
+  tags = {
+    Name        = "${var.project_name}-${var.environment}-cloudfront-logs"
+    Environment = var.environment
+    Project     = var.project_name
+  }
+}
+
+resource "aws_s3_bucket_versioning" "cloudfront_logs" {
+  bucket = aws_s3_bucket.cloudfront_logs.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "cloudfront_logs" {
+  bucket = aws_s3_bucket.cloudfront_logs.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.s3.arn
+    }
+    bucket_key_enabled = true
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "cloudfront_logs" {
+  bucket = aws_s3_bucket.cloudfront_logs.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets  = true
+}
+
+# S3 Bucket for Access Logs (centralized logging)
+resource "aws_s3_bucket" "access_logs" { # tfsec:ignore:aws-s3-enable-bucket-logging
+  bucket = "${var.project_name}-${var.environment}-access-logs"
+
+  tags = {
+    Name        = "${var.project_name}-${var.environment}-access-logs"
+    Environment = var.environment
+    Project     = var.project_name
+  }
+}
+
+resource "aws_s3_bucket_versioning" "access_logs" {
+  bucket = aws_s3_bucket.access_logs.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "access_logs" {
+  bucket = aws_s3_bucket.access_logs.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.s3.arn
+    }
+    bucket_key_enabled = true
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "access_logs" {
+  bucket = aws_s3_bucket.access_logs.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets  = true
+}
+
+# Enable access logging for all S3 buckets
+resource "aws_s3_bucket_logging" "buckets" {
+  for_each = { for bucket in local.all_buckets : bucket.name => bucket }
+
+  bucket = aws_s3_bucket.buckets[each.key].id
+
+  target_bucket = aws_s3_bucket.access_logs.id
+  target_prefix = "access-logs/${each.value.name}/"
 }

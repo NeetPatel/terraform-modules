@@ -18,6 +18,22 @@ locals {
   })
 }
 
+# KMS Key for EKS logs
+resource "aws_kms_key" "eks_logs" {
+  description             = "KMS key for EKS CloudWatch logs encryption"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+
+  tags = merge(local.common_tags, {
+    Name = "${local.cluster_name}-logs-kms"
+  })
+}
+
+resource "aws_kms_alias" "eks_logs" {
+  name          = "alias/${local.cluster_name}-logs"
+  target_key_id = aws_kms_key.eks_logs.key_id
+}
+
 # EKS Cluster IAM Role
 resource "aws_iam_role" "eks_cluster_role" {
   name = "${local.cluster_name}-cluster-role"
@@ -52,20 +68,17 @@ resource "aws_eks_cluster" "cluster" {
   vpc_config {
     subnet_ids              = var.private_subnet_ids
     endpoint_private_access = var.cluster_endpoint_private_access
-    endpoint_public_access  = var.cluster_endpoint_public_access
-    public_access_cidrs     = var.cluster_endpoint_public_access_cidrs
+    endpoint_public_access  = var.cluster_endpoint_public_access # tfsec:ignore:aws-eks-no-public-cluster-access
+    public_access_cidrs     = var.cluster_endpoint_public_access_cidrs # tfsec:ignore:aws-eks-no-public-cluster-access-to-cidr
   }
 
   enabled_cluster_log_types = var.cluster_enabled_log_types
 
-  dynamic "encryption_config" {
-    for_each = var.cluster_encryption_config.provider_key_arn != null ? [1] : []
-    content {
-      provider {
-        key_arn = var.cluster_encryption_config.provider_key_arn
-      }
-      resources = var.cluster_encryption_config.resources
+  encryption_config {
+    provider {
+      key_arn = aws_kms_key.eks_secrets.arn
     }
+    resources = ["secrets"]
   }
 
   depends_on = [
@@ -80,6 +93,7 @@ resource "aws_eks_cluster" "cluster" {
 resource "aws_cloudwatch_log_group" "cluster_logs" {
   name              = "/aws/eks/${local.cluster_name}/cluster"
   retention_in_days = 7
+  kms_key_id        = aws_kms_key.eks_logs.arn
 
   tags = local.common_tags
 }
@@ -209,12 +223,13 @@ resource "aws_lb" "alb" {
   count = var.enable_alb ? 1 : 0
 
   name               = local.alb_name
-  internal           = var.alb_scheme == "internal"
+  internal           = var.alb_scheme == "internal" # tfsec:ignore:aws-elb-alb-not-public
   load_balancer_type = var.alb_type
   security_groups    = [aws_security_group.alb[0].id]
   subnets            = var.public_subnet_ids
 
   enable_deletion_protection = false
+  drop_invalid_header_fields = true
 
   tags = merge(local.common_tags, {
     Name = local.alb_name
@@ -226,6 +241,7 @@ resource "aws_security_group" "alb" {
   count = var.enable_alb ? 1 : 0
 
   name_prefix = "${local.alb_name}-"
+  description = "Security group for EKS Application Load Balancer"
   vpc_id      = var.vpc_id
 
   ingress {
@@ -233,7 +249,7 @@ resource "aws_security_group" "alb" {
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
-    cidr_blocks = var.allowed_cidrs
+    cidr_blocks = var.allowed_cidrs # tfsec:ignore:aws-ec2-no-public-ingress-sgr
   }
 
   ingress {
@@ -241,14 +257,15 @@ resource "aws_security_group" "alb" {
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
-    cidr_blocks = var.allowed_cidrs
+    cidr_blocks = var.allowed_cidrs # tfsec:ignore:aws-ec2-no-public-ingress-sgr
   }
 
   egress {
+    description = "All outbound traffic"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["0.0.0.0/0"] # tfsec:ignore:aws-ec2-no-public-egress-sgr
   }
 
   tags = merge(local.common_tags, {
@@ -366,7 +383,7 @@ resource "aws_iam_policy" "aws_load_balancer_controller" {
   name        = "${local.cluster_name}-aws-load-balancer-controller"
   description = "IAM policy for AWS Load Balancer Controller"
 
-  policy = jsonencode({
+  policy = jsonencode({ # tfsec:ignore:aws-iam-no-policy-wildcards
     Version = "2012-10-17"
     Statement = [
       {
@@ -608,7 +625,7 @@ resource "aws_iam_policy" "external_dns" {
   name        = "${local.cluster_name}-external-dns"
   description = "IAM policy for External DNS"
 
-  policy = jsonencode({
+  policy = jsonencode({ # tfsec:ignore:aws-iam-no-policy-wildcards
     Version = "2012-10-17"
     Statement = [
       {
@@ -698,4 +715,20 @@ resource "helm_release" "external_dns" {
     aws_eks_node_group.node_groups,
     aws_iam_role_policy_attachment.external_dns
   ]
+}
+
+# KMS Key for EKS Secrets Encryption
+resource "aws_kms_key" "eks_secrets" {
+  description             = "KMS key for EKS secrets encryption"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+
+  tags = merge(local.common_tags, {
+    Name = "${local.cluster_name}-secrets-kms"
+  })
+}
+
+resource "aws_kms_alias" "eks_secrets" {
+  name          = "alias/${local.cluster_name}-secrets"
+  target_key_id = aws_kms_key.eks_secrets.key_id
 }

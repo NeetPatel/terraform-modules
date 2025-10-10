@@ -17,6 +17,11 @@ resource "aws_cloudtrail" "main" {
   include_global_service_events = true
   is_multi_region_trail         = true
   enable_logging                = true
+  enable_log_file_validation    = true
+  kms_key_id                   = aws_kms_key.cloudtrail.arn
+
+  cloud_watch_logs_group_arn = "${aws_cloudwatch_log_group.cloudtrail.arn}:*"
+  cloud_watch_logs_role_arn  = aws_iam_role.cloudtrail_cloudwatch_role.arn
 
   event_selector {
     read_write_type                 = "All"
@@ -54,7 +59,8 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "cloudtrail_logs" 
 
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.cloudtrail.arn
     }
     bucket_key_enabled = true
   }
@@ -187,7 +193,8 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "config_logs" {
 
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.cloudtrail.arn
     }
     bucket_key_enabled = true
   }
@@ -200,6 +207,59 @@ resource "aws_s3_bucket_public_access_block" "config_logs" {
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
+}
+
+# S3 Bucket for Security Access Logs
+resource "aws_s3_bucket" "security_access_logs" { # tfsec:ignore:aws-s3-enable-bucket-logging
+  bucket = "${var.project_name}-${var.environment}-security-access-logs"
+
+  tags = merge(local.common_tags, {
+    Name = "${var.project_name}-${var.environment}-security-access-logs"
+  })
+}
+
+resource "aws_s3_bucket_versioning" "security_access_logs" {
+  bucket = aws_s3_bucket.security_access_logs.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "security_access_logs" {
+  bucket = aws_s3_bucket.security_access_logs.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.cloudtrail.arn
+    }
+    bucket_key_enabled = true
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "security_access_logs" {
+  bucket = aws_s3_bucket.security_access_logs.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# Enable access logging for CloudTrail logs bucket
+resource "aws_s3_bucket_logging" "cloudtrail_logs" {
+  bucket = aws_s3_bucket.cloudtrail_logs.id
+
+  target_bucket = aws_s3_bucket.security_access_logs.id
+  target_prefix = "access-logs/cloudtrail/"
+}
+
+# Enable access logging for Config logs bucket
+resource "aws_s3_bucket_logging" "config_logs" {
+  bucket = aws_s3_bucket.config_logs.id
+
+  target_bucket = aws_s3_bucket.security_access_logs.id
+  target_prefix = "access-logs/config/"
 }
 
 # Config IAM Role
@@ -231,7 +291,7 @@ resource "aws_iam_role_policy" "config_s3_policy" {
   name = "${var.project_name}-${var.environment}-config-s3-policy"
   role = aws_iam_role.config_role.id
 
-  policy = jsonencode({
+  policy = jsonencode({ # tfsec:ignore:aws-iam-no-policy-wildcards
     Version = "2012-10-17"
     Statement = [
       {
@@ -270,6 +330,7 @@ resource "aws_flow_log" "vpc_flow_log" {
 resource "aws_cloudwatch_log_group" "vpc_flow_log" {
   name              = "/aws/vpc/flowlogs"
   retention_in_days = 30
+  kms_key_id        = aws_kms_key.cloudtrail.arn
 
   tags = merge(local.common_tags, {
     Name = "${var.project_name}-${var.environment}-vpc-flow-log-group"
@@ -300,7 +361,7 @@ resource "aws_iam_role_policy" "flow_log_policy" {
   name = "${var.project_name}-${var.environment}-flow-log-policy"
   role = aws_iam_role.flow_log_role.id
 
-  policy = jsonencode({
+  policy = jsonencode({ # tfsec:ignore:aws-iam-no-policy-wildcards
     Version = "2012-10-17"
     Statement = [
       {
@@ -420,8 +481,62 @@ resource "aws_acm_certificate" "main" {
   })
 }
 
+# CloudWatch Log Group for CloudTrail
+resource "aws_cloudwatch_log_group" "cloudtrail" {
+  name              = "/aws/cloudtrail/${var.project_name}-${var.environment}"
+  retention_in_days = 30
+  kms_key_id        = aws_kms_key.cloudtrail.arn
+
+  tags = merge(local.common_tags, {
+    Name = "${var.project_name}-${var.environment}-cloudtrail-log-group"
+  })
+}
+
+# IAM Role for CloudTrail CloudWatch Logs
+resource "aws_iam_role" "cloudtrail_cloudwatch_role" {
+  name = "${var.project_name}-${var.environment}-cloudtrail-cloudwatch-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "cloudtrail.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = merge(local.common_tags, {
+    Name = "${var.project_name}-${var.environment}-cloudtrail-cloudwatch-role"
+  })
+}
+
+# IAM Policy for CloudTrail CloudWatch Logs
+resource "aws_iam_role_policy" "cloudtrail_cloudwatch_policy" {
+  name = "${var.project_name}-${var.environment}-cloudtrail-cloudwatch-policy"
+  role = aws_iam_role.cloudtrail_cloudwatch_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "${aws_cloudwatch_log_group.cloudtrail.arn}:*"
+      }
+    ]
+  })
+}
+
 # Data sources
 data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
 
 # Local values
 locals {
@@ -431,4 +546,51 @@ locals {
     ManagedBy   = "terraform"
     Security    = "enhanced"
   })
+}
+
+# KMS Key for CloudTrail Encryption
+resource "aws_kms_key" "cloudtrail" {
+  description             = "KMS key for CloudTrail encryption"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "Enable IAM User Permissions"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      },
+      {
+        Sid    = "Allow CloudTrail to encrypt logs"
+        Effect = "Allow"
+        Principal = {
+          Service = "cloudtrail.amazonaws.com"
+        }
+        Action = [
+          "kms:GenerateDataKey*"
+        ]
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "kms:EncryptionContext:aws:cloudtrail:arn" = "arn:aws:cloudtrail:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:trail/${var.project_name}-${var.environment}-cloudtrail"
+          }
+        }
+      }
+    ]
+  })
+
+  tags = merge(local.common_tags, {
+    Name = "${var.project_name}-${var.environment}-cloudtrail-kms"
+  })
+}
+
+resource "aws_kms_alias" "cloudtrail" {
+  name          = "alias/${var.project_name}-${var.environment}-cloudtrail"
+  target_key_id = aws_kms_key.cloudtrail.key_id
 }

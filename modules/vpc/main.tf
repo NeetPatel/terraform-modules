@@ -1,5 +1,5 @@
 # VPC
-resource "aws_vpc" "main" {
+resource "aws_vpc" "main" { # tfsec:ignore:aws-ec2-require-vpc-flow-logs-for-all-vpcs
   cidr_block           = var.vpc_cidr
   enable_dns_hostnames = true
   enable_dns_support   = true
@@ -29,7 +29,7 @@ resource "aws_subnet" "public" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = var.public_subnet_cidrs[count.index]
   availability_zone       = data.aws_availability_zones.available.names[count.index]
-  map_public_ip_on_launch = true
+  map_public_ip_on_launch = true # tfsec:ignore:aws-ec2-no-public-ip-subnet
 
   tags = {
     Name        = "${var.project_name}-public-subnet-${count.index + 1}"

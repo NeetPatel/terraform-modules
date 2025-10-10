@@ -481,6 +481,7 @@ output "route53_dns_commands" {
   value       = var.route53_enable ? module.route53[0].dns_commands : null
 }
 
+
 # Security Outputs
 output "security_cloudtrail_arn" {
   description = "ARN of the CloudTrail"

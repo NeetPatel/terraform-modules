@@ -666,3 +666,22 @@ variable "security_tags" {
   type        = map(string)
   default     = {}
 }
+
+# Developer Access Configuration
+variable "developer_users" {
+  description = "List of developer usernames"
+  type        = list(string)
+  default     = []
+}
+
+variable "developer_groups" {
+  description = "List of developer group names"
+  type        = list(string)
+  default     = ["developers", "devops-team", "qa-team"]
+}
+
+variable "developer_allowed_ip_ranges" {
+  description = "List of IP ranges allowed for developer access"
+  type        = list(string)
+  default     = ["202.131.107.130/32", "202.131.110.138/32"]
+}

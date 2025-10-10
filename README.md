@@ -6,6 +6,7 @@ This Terraform configuration provisions a comprehensive AWS infrastructure inclu
 
 ## 🏗️ Architecture
 
+### **Core Infrastructure Components**
 - **EC2 Instance**: Ubuntu 22.04 LTS with security hardening and Elastic IP
 - **VPC**: Custom VPC with public/private subnets, NAT Gateway, and Internet Gateway
 - **S3 Storage**: Multiple S3 buckets with CloudFront CDN distributions
@@ -102,6 +103,10 @@ This Terraform configuration provisions a comprehensive AWS infrastructure inclu
     │   ├── variables.tf
     │   └── outputs.tf
     ├── eks/                   # EKS cluster module
+    │   ├── main.tf
+    │   ├── variables.tf
+    │   ├── outputs.tf
+    │   └── versions.tf
     │   ├── main.tf
     │   ├── variables.tf
     │   ├── outputs.tf
@@ -238,7 +243,20 @@ This Terraform configuration provisions a comprehensive AWS infrastructure inclu
    kubectl get nodepools
    ```
 
-10. **Deploy Applications to EKS**:
+    ```bash
+    
+    # Check Service Logs
+    
+    # Scale Services
+    
+    # Check Service Health
+    
+    # Check HPA Status
+    ```
+
+11. **Configure VPN Server**:
+
+12. **Deploy Applications to EKS**:
     ```bash
     # Create a sample deployment
     kubectl create deployment nginx --image=nginx
@@ -249,7 +267,7 @@ This Terraform configuration provisions a comprehensive AWS infrastructure inclu
     kubectl get nodes -w
     ```
 
-11. **Monitor Security Services**:
+13. **Monitor Security Services**:
     ```bash
     # Check GuardDuty findings
     aws guardduty list-findings --detector-id <detector-id>
@@ -346,6 +364,10 @@ This Terraform configuration provisions a comprehensive AWS infrastructure inclu
 | `eks_alb_type` | ALB type (application/network) | `"application"` |
 | `eks_alb_target_groups` | ALB target groups | `{}` |
 | `eks_alb_listeners` | ALB listeners | `{}` |
+
+
+| Variable | Description | Default |
+|----------|-------------|---------|
 
 
 | Variable | Description | Default |
@@ -544,6 +566,11 @@ eks_tags = {}
   }
 }
 
+  Environment = "pre-prod"
+  Project     = "devops-test"
+  Tier        = "Application"
+}
+
 # External DNS Configuration
 eks_enable_external_dns = true
 eks_external_dns_version = "1.13.1"
@@ -640,6 +667,7 @@ After deployment, Terraform will output:
 - `eks_waf_web_acl_association_id`: WAF Web ACL association ID
 - `eks_cloudwatch_log_group_name`: CloudWatch log group name
 - `eks_cloudwatch_log_group_arn`: CloudWatch log group ARN
+
 
 
 ### External DNS Outputs

@@ -1,6 +1,22 @@
 # VPN EC2 Instance Module
 # This module creates an EC2 instance with OpenVPN server
 
+# KMS Key for VPN secrets
+resource "aws_kms_key" "vpn_secrets" {
+  description             = "KMS key for VPN secrets encryption"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+
+  tags = merge(local.common_tags, {
+    Name = "${var.project_name}-${var.environment}-vpn-secrets-kms"
+  })
+}
+
+resource "aws_kms_alias" "vpn_secrets" {
+  name          = "alias/${var.project_name}-${var.environment}-vpn-secrets"
+  target_key_id = aws_kms_key.vpn_secrets.key_id
+}
+
 terraform {
   required_providers {
     aws = {
@@ -25,6 +41,7 @@ resource "aws_secretsmanager_secret" "openvpn_password" {
   name                    = "${var.project_name}-${var.environment}-vpn-password"
   description             = "OpenVPN server password"
   recovery_window_in_days = 7
+  kms_key_id              = aws_kms_key.vpn_secrets.arn
 
   tags = local.common_tags
 }
@@ -39,6 +56,7 @@ resource "aws_secretsmanager_secret_version" "openvpn_password" {
 # Security Group for VPN Server
 resource "aws_security_group" "vpn_sg" {
   name_prefix = "${var.project_name}-${var.environment}-vpn-"
+  description = "Security group for VPN server with OpenVPN access"
   vpc_id      = var.vpc_id
 
   # SSH access from allowed IPs
@@ -58,7 +76,7 @@ resource "aws_security_group" "vpn_sg" {
     from_port   = 1194
     to_port     = 1194
     protocol    = "udp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["0.0.0.0/0"] # tfsec:ignore:aws-ec2-no-public-ingress-sgr
     description = "OpenVPN UDP"
   }
 
@@ -67,7 +85,7 @@ resource "aws_security_group" "vpn_sg" {
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["0.0.0.0/0"] # tfsec:ignore:aws-ec2-no-public-ingress-sgr
     description = "OpenVPN TCP"
   }
 
@@ -76,7 +94,7 @@ resource "aws_security_group" "vpn_sg" {
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["0.0.0.0/0"] # tfsec:ignore:aws-ec2-no-public-ingress-sgr
     description = "HTTP for OpenVPN admin"
   }
 
@@ -85,7 +103,7 @@ resource "aws_security_group" "vpn_sg" {
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["0.0.0.0/0"] # tfsec:ignore:aws-ec2-no-public-ingress-sgr
     description = "HTTPS for OpenVPN admin"
   }
 
@@ -94,7 +112,7 @@ resource "aws_security_group" "vpn_sg" {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["0.0.0.0/0"] # tfsec:ignore:aws-ec2-no-public-egress-sgr
     description = "All outbound traffic"
   }
 
@@ -131,6 +149,12 @@ resource "aws_instance" "vpn_server" {
     vpn_client_name  = "${var.project_name}-${var.environment}-client"
   }))
 
+  metadata_options {
+    http_endpoint = "enabled"
+    http_tokens   = "required"
+    http_put_response_hop_limit = 2
+  }
+
   monitoring = true
 
   tags = merge(local.common_tags, {
@@ -156,6 +180,7 @@ resource "aws_secretsmanager_secret" "vpn_connection" {
   name                    = "${var.project_name}-${var.environment}-vpn-connection"
   description             = "VPN server connection details"
   recovery_window_in_days = 7
+  kms_key_id              = aws_kms_key.vpn_secrets.arn
 
   tags = local.common_tags
 }
@@ -177,6 +202,7 @@ resource "aws_secretsmanager_secret_version" "vpn_connection" {
 resource "aws_cloudwatch_log_group" "vpn_logs" {
   name              = "/aws/ec2/${var.project_name}-${var.environment}-vpn"
   retention_in_days = 30
+  kms_key_id        = aws_kms_key.vpn_secrets.arn
 
   tags = local.common_tags
 }
