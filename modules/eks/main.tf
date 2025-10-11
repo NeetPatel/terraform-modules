@@ -133,6 +133,126 @@ resource "aws_iam_role_policy_attachment" "eks_container_registry_policy" {
   role       = aws_iam_role.eks_node_group_role.name
 }
 
+# Security Group for EKS Nodes
+resource "aws_security_group" "eks_nodes" {
+  name_prefix = "${local.cluster_name}-nodes-"
+  description = "Security group for EKS nodes"
+  vpc_id      = var.vpc_id
+
+  # Allow all outbound traffic
+  egress {
+    description = "All outbound traffic"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"] # tfsec:ignore:aws-ec2-no-public-egress-sgr
+  }
+
+  # Allow inbound traffic from EKS cluster
+  ingress {
+    description = "HTTPS from EKS cluster"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
+  }
+
+  # Allow inbound traffic from ALB
+  ingress {
+    description = "HTTP from ALB"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
+  }
+
+  # Allow inbound traffic from ALB
+  ingress {
+    description = "HTTPS from ALB"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
+  }
+
+  # Allow node-to-node communication
+  ingress {
+    description = "Node-to-node communication"
+    from_port   = 0
+    to_port     = 65535
+    protocol    = "tcp"
+    self        = true
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "${local.cluster_name}-nodes-sg"
+  })
+}
+
+# Launch Template for EKS Node Groups with gp3 storage
+resource "aws_launch_template" "node_group" {
+  for_each = var.node_groups
+
+  name_prefix   = "${local.cluster_name}-${each.key}-"
+  image_id      = data.aws_ami.eks_optimized.id
+  instance_type = each.value.instance_types[0]
+
+  vpc_security_group_ids = [aws_security_group.eks_nodes.id]
+
+  block_device_mappings {
+    device_name = "/dev/xvda"
+    ebs {
+      volume_type           = "gp3"
+      volume_size           = each.value.disk_size
+      encrypted             = true
+      kms_key_id           = aws_kms_key.eks_secrets.arn
+      iops                 = 3000
+      throughput           = 125
+      delete_on_termination = true
+    }
+  }
+
+  metadata_options {
+    http_endpoint = "enabled"
+    http_tokens   = "required"
+    http_put_response_hop_limit = 2
+  }
+
+  user_data = base64encode(templatefile("${path.module}/user_data.sh", {
+    cluster_name = local.cluster_name
+    cluster_endpoint = aws_eks_cluster.cluster.endpoint
+    cluster_ca = aws_eks_cluster.cluster.certificate_authority[0].data
+  }))
+
+  tag_specifications {
+    resource_type = "instance"
+    tags = merge(local.common_tags, {
+      Name = "${local.cluster_name}-${each.key}-node"
+      NodeGroup = each.key
+    })
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+# Data source for EKS optimized AMI
+data "aws_ami" "eks_optimized" {
+  most_recent = true
+  owners      = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["amazon-eks-node-${var.cluster_version}-v*"]
+  }
+
+  filter {
+    name   = "architecture"
+    values = ["x86_64"]
+  }
+}
+
 # EKS Managed Node Groups
 resource "aws_eks_node_group" "node_groups" {
   for_each = var.node_groups
@@ -163,6 +283,17 @@ resource "aws_eks_node_group" "node_groups" {
   }
 
   labels = each.value.labels
+
+  # Update configuration for rolling updates
+  update_config {
+    max_unavailable_percentage = 25
+  }
+
+  # Launch template for advanced storage configuration
+  launch_template {
+    id      = aws_launch_template.node_group[each.key].id
+    version = aws_launch_template.node_group[each.key].latest_version
+  }
 
   depends_on = [
     aws_iam_role_policy_attachment.eks_worker_node_policy,
@@ -657,6 +788,362 @@ resource "aws_iam_role_policy_attachment" "external_dns" {
 
   policy_arn = aws_iam_policy.external_dns[0].arn
   role       = aws_iam_role.external_dns[0].name
+}
+
+# Random password for Grafana admin
+resource "random_password" "grafana_admin_password" {
+  count = var.enable_prometheus_stack ? 1 : 0
+  
+  length  = 32
+  special = true
+  upper   = true
+  lower   = true
+  numeric = true
+}
+
+# Store Grafana admin password in Secrets Manager
+resource "aws_secretsmanager_secret" "grafana_admin_password" {
+  count = var.enable_prometheus_stack ? 1 : 0
+  
+  name                    = "${local.cluster_name}-grafana-admin-password"
+  description             = "Grafana admin password for ${local.cluster_name}"
+  recovery_window_in_days  = 7
+  kms_key_id              = aws_kms_key.eks_secrets.arn
+  
+  tags = merge(local.common_tags, {
+    Name = "${local.cluster_name}-grafana-admin-password"
+  })
+}
+
+resource "aws_secretsmanager_secret_version" "grafana_admin_password" {
+  count = var.enable_prometheus_stack ? 1 : 0
+  
+  secret_id     = aws_secretsmanager_secret.grafana_admin_password[0].id
+  secret_string = random_password.grafana_admin_password[0].result
+}
+
+# StorageClass for gp3 with encryption
+resource "kubernetes_storage_class" "gp3_encrypted" {
+  metadata {
+    name = "gp3"
+    annotations = {
+      "storageclass.kubernetes.io/is-default-class" = "true"
+    }
+  }
+  
+  storage_provisioner    = "ebs.csi.aws.com"
+  reclaim_policy        = "Delete"
+  volume_binding_mode   = "WaitForFirstConsumer"
+  allow_volume_expansion = true
+  
+  parameters = {
+    type       = "gp3"
+    encrypted  = "true"
+    kmsKeyId   = aws_kms_key.eks_secrets.arn
+    fsType     = "ext4"
+    iops       = "3000"
+    throughput = "125"
+  }
+}
+
+# Prometheus Stack Helm Release
+resource "helm_release" "prometheus_stack" {
+  count = var.enable_prometheus_stack ? 1 : 0
+
+  name       = "prometheus"
+  repository = "https://prometheus-community.github.io/helm-charts"
+  chart      = "kube-prometheus-stack"
+  version    = var.prometheus_stack_version
+  namespace  = "monitoring"
+
+  create_namespace = true
+
+  values = [
+    yamlencode({
+      # Prometheus Configuration
+      prometheus = {
+        prometheusSpec = {
+          retention = "30d"
+          resources = {
+            requests = {
+              cpu    = "500m"
+              memory = "1Gi"
+            }
+            limits = {
+              cpu    = "1000m"
+              memory = "2Gi"
+            }
+          }
+          storageSpec = {
+            volumeClaimTemplate = {
+              spec = {
+                storageClassName = "gp3"
+                accessModes      = ["ReadWriteOnce"]
+                resources = {
+                  requests = {
+                    storage = "50Gi"
+                  }
+                }
+              }
+            }
+          }
+          nodeSelector = {
+            "kubernetes.io/os" = "linux"
+          }
+          tolerations = []
+        }
+      }
+
+      # Grafana Configuration
+      grafana = {
+        enabled = true
+        adminPassword = random_password.grafana_admin_password[0].result
+        resources = {
+          requests = {
+            cpu    = "200m"
+            memory = "256Mi"
+          }
+          limits = {
+            cpu    = "500m"
+            memory = "512Mi"
+          }
+        }
+        persistence = {
+          enabled = true
+          size    = "10Gi"
+          storageClassName = "gp3"
+        }
+        service = {
+          type = "LoadBalancer"
+          annotations = {
+            "service.beta.kubernetes.io/aws-load-balancer-type" = "nlb"
+            "service.beta.kubernetes.io/aws-load-balancer-scheme" = "internal"
+          }
+        }
+        nodeSelector = {
+          "kubernetes.io/os" = "linux"
+        }
+        tolerations = []
+      }
+
+      # AlertManager Configuration
+      alertmanager = {
+        enabled = true
+        alertmanagerSpec = {
+          resources = {
+            requests = {
+              cpu    = "100m"
+              memory = "128Mi"
+            }
+            limits = {
+              cpu    = "200m"
+              memory = "256Mi"
+            }
+          }
+          storage = {
+            volumeClaimTemplate = {
+              spec = {
+                storageClassName = "gp3"
+                accessModes      = ["ReadWriteOnce"]
+                resources = {
+                  requests = {
+                    storage = "10Gi"
+                  }
+                }
+              }
+            }
+          }
+          nodeSelector = {
+            "kubernetes.io/os" = "linux"
+          }
+          tolerations = []
+        }
+      }
+
+      # Node Exporter Configuration
+      nodeExporter = {
+        enabled = true
+        resources = {
+          requests = {
+            cpu    = "100m"
+            memory = "128Mi"
+          }
+          limits = {
+            cpu    = "200m"
+            memory = "256Mi"
+          }
+        }
+        nodeSelector = {
+          "kubernetes.io/os" = "linux"
+        }
+        tolerations = []
+      }
+
+      # Kube State Metrics Configuration
+      kubeStateMetrics = {
+        enabled = true
+        resources = {
+          requests = {
+            cpu    = "100m"
+            memory = "128Mi"
+          }
+          limits = {
+            cpu    = "200m"
+            memory = "256Mi"
+          }
+        }
+        nodeSelector = {
+          "kubernetes.io/os" = "linux"
+        }
+        tolerations = []
+      }
+
+      # Default dashboards and rules
+      defaultRules = {
+        create = true
+      }
+
+      # Service monitors
+      prometheusOperator = {
+        enabled = true
+        resources = {
+          requests = {
+            cpu    = "100m"
+            memory = "128Mi"
+          }
+          limits = {
+            cpu    = "200m"
+            memory = "256Mi"
+          }
+        }
+        nodeSelector = {
+          "kubernetes.io/os" = "linux"
+        }
+        tolerations = []
+      }
+    })
+  ]
+
+  depends_on = [
+    aws_eks_node_group.node_groups
+  ]
+}
+
+# Metrics Server Helm Release
+resource "helm_release" "metrics_server" {
+  count = var.enable_metrics_server ? 1 : 0
+
+  name       = "metrics-server"
+  repository = "https://kubernetes-sigs.github.io/metrics-server/"
+  chart      = "metrics-server"
+  version    = var.metrics_server_version
+  namespace  = "kube-system"
+
+  values = [
+    yamlencode({
+      args = [
+        "--cert-dir=/tmp",
+        "--secure-port=4443",
+        "--kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname",
+        "--kubelet-use-node-status-port",
+        "--metric-resolution=15s"
+      ]
+      resources = {
+        requests = {
+          cpu    = "100m"
+          memory = "128Mi"
+        }
+        limits = {
+          cpu    = "200m"
+          memory = "256Mi"
+        }
+      }
+      nodeSelector = {
+        "kubernetes.io/os" = "linux"
+      }
+      tolerations = []
+      affinity = {
+        nodeAffinity = {
+          requiredDuringSchedulingIgnoredDuringExecution = {
+            nodeSelectorTerms = [
+              {
+                matchExpressions = [
+                  {
+                    key      = "kubernetes.io/os"
+                    operator = "In"
+                    values   = ["linux"]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    })
+  ]
+}
+
+# AWS Load Balancer Controller Helm Release
+resource "helm_release" "aws_load_balancer_controller" {
+  count = var.enable_alb ? 1 : 0
+
+  name       = "aws-load-balancer-controller"
+  repository = "https://aws.github.io/eks-charts"
+  chart      = "aws-load-balancer-controller"
+  version    = var.alb_controller_version
+  namespace  = "kube-system"
+
+  values = [
+    yamlencode({
+      clusterName = local.cluster_name
+      serviceAccount = {
+        create = false
+        name   = "aws-load-balancer-controller"
+        annotations = {
+          "eks.amazonaws.com/role-arn" = aws_iam_role.aws_load_balancer_controller[0].arn
+        }
+      }
+      region = var.aws_region
+      vpcId = var.vpc_id
+      resources = {
+        requests = {
+          cpu    = "100m"
+          memory = "128Mi"
+        }
+        limits = {
+          cpu    = "200m"
+          memory = "256Mi"
+        }
+      }
+      nodeSelector = {
+        "kubernetes.io/os" = "linux"
+      }
+      tolerations = []
+      affinity = {
+        nodeAffinity = {
+          requiredDuringSchedulingIgnoredDuringExecution = {
+            nodeSelectorTerms = [
+              {
+                matchExpressions = [
+                  {
+                    key      = "kubernetes.io/os"
+                    operator = "In"
+                    values   = ["linux"]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+      logLevel = "info"
+      enableServiceMutatorWebhook = false
+    })
+  ]
+
+  depends_on = [
+    aws_iam_role_policy_attachment.aws_load_balancer_controller
+  ]
 }
 
 # External DNS Helm Release

@@ -145,6 +145,7 @@ module "eks_cluster" {
 
   # VPC Configuration
   vpc_id             = module.vpc.vpc_id
+  vpc_cidr           = var.eks_vpc_cidr
   private_subnet_ids = module.vpc.private_subnet_ids
   public_subnet_ids  = module.vpc.public_subnet_ids
 
@@ -161,10 +162,11 @@ module "eks_cluster" {
   node_groups = var.eks_node_groups
 
   # ALB Configuration
-  enable_alb        = var.eks_enable_alb
-  alb_name          = var.eks_alb_name
-  alb_scheme        = var.eks_alb_scheme
-  alb_type          = var.eks_alb_type
+  enable_alb             = var.eks_enable_alb
+  alb_name               = var.eks_alb_name
+  alb_scheme             = var.eks_alb_scheme
+  alb_type               = var.eks_alb_type
+  alb_controller_version = var.eks_alb_controller_version
   alb_target_groups = var.eks_alb_target_groups
   alb_listeners     = var.eks_alb_listeners
 
@@ -173,6 +175,14 @@ module "eks_cluster" {
   enable_waf          = var.eks_enable_waf
   waf_web_acl_arn     = var.eks_enable_waf && var.security_enable ? module.security[0].waf_web_acl_arn : var.eks_waf_web_acl_arn
   ssl_certificate_arn = var.security_enable ? module.security[0].acm_certificate_arn : null
+
+  # Prometheus Stack Configuration
+  enable_prometheus_stack    = var.eks_enable_prometheus_stack
+  prometheus_stack_version   = var.eks_prometheus_stack_version
+
+  # Metrics Server Configuration
+  enable_metrics_server  = var.eks_enable_metrics_server
+  metrics_server_version = var.eks_metrics_server_version
 
   # External DNS Configuration
   enable_external_dns            = var.eks_enable_external_dns

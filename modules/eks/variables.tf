@@ -38,6 +38,11 @@ variable "cluster_name" {
   default     = ""
 }
 
+variable "vpc_cidr" {
+  description = "CIDR block for the VPC"
+  type        = string
+}
+
 variable "cluster_version" {
   description = "Kubernetes version for EKS cluster"
   type        = string
@@ -119,10 +124,40 @@ variable "node_groups" {
 }
 
 # ALB Configuration
+variable "enable_prometheus_stack" {
+  description = "Enable Prometheus + Grafana monitoring stack"
+  type        = bool
+  default     = true
+}
+
+variable "prometheus_stack_version" {
+  description = "Version of the kube-prometheus-stack Helm chart"
+  type        = string
+  default     = "55.0.0"
+}
+
+variable "enable_metrics_server" {
+  description = "Enable Metrics Server for HPA and resource monitoring"
+  type        = bool
+  default     = true
+}
+
+variable "metrics_server_version" {
+  description = "Version of the Metrics Server Helm chart"
+  type        = string
+  default     = "3.12.0"
+}
+
 variable "enable_alb" {
   description = "Enable Application Load Balancer"
   type        = bool
   default     = true
+}
+
+variable "alb_controller_version" {
+  description = "Version of the AWS Load Balancer Controller Helm chart"
+  type        = string
+  default     = "1.8.2"
 }
 
 variable "alb_name" {

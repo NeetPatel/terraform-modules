@@ -11,6 +11,16 @@ output "cluster_arn" {
   value       = aws_eks_cluster.cluster.arn
 }
 
+output "grafana_admin_password_secret_name" {
+  description = "Name of the Secrets Manager secret containing Grafana admin password"
+  value       = var.enable_prometheus_stack ? aws_secretsmanager_secret.grafana_admin_password[0].name : null
+}
+
+output "grafana_admin_password_secret_arn" {
+  description = "ARN of the Secrets Manager secret containing Grafana admin password"
+  value       = var.enable_prometheus_stack ? aws_secretsmanager_secret.grafana_admin_password[0].arn : null
+}
+
 output "cluster_name" {
   description = "Name of the EKS cluster"
   value       = aws_eks_cluster.cluster.name
