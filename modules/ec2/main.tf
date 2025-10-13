@@ -47,6 +47,15 @@ resource "aws_security_group" "ec2_sg" {
     cidr_blocks = ["0.0.0.0/0"] # tfsec:ignore:aws-ec2-no-public-ingress-sgr
   }
 
+  # Jenkins inbound rule - allow from all IPs
+  ingress {
+    description = "Jenkins"
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"] # tfsec:ignore:aws-ec2-no-public-ingress-sgr
+  }
+
   # SSH inbound rule - restricted to specific IPs
   dynamic "ingress" {
     for_each = var.allowed_ssh_cidrs
@@ -126,6 +135,9 @@ resource "aws_instance" "ec2_instance" {
   key_name = length(var.public_ssh_keys) > 0 ? aws_key_pair.ec2_keys[0].key_name : aws_key_pair.ec2_generated_key[0].key_name
   vpc_security_group_ids = [aws_security_group.ec2_sg.id]
   subnet_id              = var.subnet_id
+
+  # User data script for Jenkins setup
+  user_data = base64encode(file("${path.module}/setup_jenkins.sh"))
 
   # Enable detailed monitoring
   monitoring = true

@@ -43,3 +43,19 @@ output "availability_zone" {
   description = "Availability zone of the EC2 instance"
   value       = aws_instance.ec2_instance.availability_zone
 }
+
+# Jenkins-related outputs
+output "jenkins_url" {
+  description = "Jenkins URL via NGINX reverse proxy"
+  value       = "http://${aws_eip.ec2_eip.public_ip}"
+}
+
+output "jenkins_direct_url" {
+  description = "Jenkins direct URL (port 8080)"
+  value       = "http://${aws_eip.ec2_eip.public_ip}:8080"
+}
+
+output "jenkins_setup_complete" {
+  description = "Jenkins setup completion status"
+  value       = "Setup script deployed. Check /var/log/jenkins-setup-complete after instance startup."
+}

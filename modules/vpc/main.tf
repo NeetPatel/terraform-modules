@@ -55,29 +55,29 @@ resource "aws_subnet" "private" {
   }
 }
 
-# Elastic IP for NAT Gateway
+# Elastic IPs for NAT Gateways (2 EIPs for high availability)
 resource "aws_eip" "nat" {
-  count = var.enable_nat_gateway ? 1 : 0
+  count = var.enable_nat_gateway ? 2 : 0
 
   domain     = "vpc"
   depends_on = [aws_internet_gateway.main]
 
   tags = {
-    Name        = "${var.project_name}-nat-eip"
+    Name        = "${var.project_name}-nat-eip-${count.index + 1}"
     Environment = var.environment
     Project     = var.project_name
   }
 }
 
-# NAT Gateway
+# NAT Gateways (2 NAT Gateways for high availability)
 resource "aws_nat_gateway" "main" {
-  count = var.enable_nat_gateway ? 1 : 0
+  count = var.enable_nat_gateway ? 2 : 0
 
-  allocation_id = aws_eip.nat[0].id
-  subnet_id     = aws_subnet.public[0].id
+  allocation_id = aws_eip.nat[count.index].id
+  subnet_id     = aws_subnet.public[count.index].id
 
   tags = {
-    Name        = "${var.project_name}-nat-gateway"
+    Name        = "${var.project_name}-nat-gateway-${count.index + 1}"
     Environment = var.environment
     Project     = var.project_name
   }
@@ -101,19 +101,19 @@ resource "aws_route_table" "public" {
   }
 }
 
-# Route Table for Private Subnets
+# Route Tables for Private Subnets (2 route tables for high availability)
 resource "aws_route_table" "private" {
-  count = var.enable_nat_gateway ? 1 : 0
+  count = var.enable_nat_gateway ? 2 : 0
 
   vpc_id = aws_vpc.main.id
 
   route {
     cidr_block     = "0.0.0.0/0"
-    nat_gateway_id = aws_nat_gateway.main[0].id
+    nat_gateway_id = aws_nat_gateway.main[count.index].id
   }
 
   tags = {
-    Name        = "${var.project_name}-private-rt"
+    Name        = "${var.project_name}-private-rt-${count.index + 1}"
     Environment = var.environment
     Project     = var.project_name
   }
@@ -127,12 +127,12 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
-# Route Table Associations for Private Subnets
+# Route Table Associations for Private Subnets (distribute across 2 NAT Gateways)
 resource "aws_route_table_association" "private" {
   count = var.enable_nat_gateway ? length(aws_subnet.private) : 0
 
   subnet_id      = aws_subnet.private[count.index].id
-  route_table_id = aws_route_table.private[0].id
+  route_table_id = aws_route_table.private[count.index % 2].id
 }
 
 # Data source for availability zones

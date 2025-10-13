@@ -167,8 +167,8 @@ module "eks_cluster" {
   alb_scheme             = var.eks_alb_scheme
   alb_type               = var.eks_alb_type
   alb_controller_version = var.eks_alb_controller_version
-  alb_target_groups = var.eks_alb_target_groups
-  alb_listeners     = var.eks_alb_listeners
+  alb_target_groups      = var.eks_alb_target_groups
+  alb_listeners          = var.eks_alb_listeners
 
   # Security Configuration
   allowed_cidrs       = var.eks_allowed_cidrs
@@ -177,8 +177,8 @@ module "eks_cluster" {
   ssl_certificate_arn = var.security_enable ? module.security[0].acm_certificate_arn : null
 
   # Prometheus Stack Configuration
-  enable_prometheus_stack    = var.eks_enable_prometheus_stack
-  prometheus_stack_version   = var.eks_prometheus_stack_version
+  enable_prometheus_stack  = var.eks_enable_prometheus_stack
+  prometheus_stack_version = var.eks_prometheus_stack_version
 
   # Metrics Server Configuration
   enable_metrics_server  = var.eks_enable_metrics_server

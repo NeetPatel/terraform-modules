@@ -33,8 +33,18 @@ output "private_subnet_cidrs" {
   value       = aws_subnet.private[*].cidr_block
 }
 
+output "nat_gateway_ids" {
+  description = "IDs of the NAT Gateways"
+  value       = var.enable_nat_gateway ? aws_nat_gateway.main[*].id : []
+}
+
+output "nat_gateway_public_ips" {
+  description = "Public IPs of the NAT Gateways"
+  value       = var.enable_nat_gateway ? aws_eip.nat[*].public_ip : []
+}
+
 output "nat_gateway_id" {
-  description = "ID of the NAT Gateway"
+  description = "ID of the first NAT Gateway (legacy)"
   value       = var.enable_nat_gateway ? aws_nat_gateway.main[0].id : null
 }
 
@@ -43,7 +53,12 @@ output "public_route_table_id" {
   value       = aws_route_table.public.id
 }
 
+output "private_route_table_ids" {
+  description = "IDs of the private route tables"
+  value       = var.enable_nat_gateway ? aws_route_table.private[*].id : []
+}
+
 output "private_route_table_id" {
-  description = "ID of the private route table"
+  description = "ID of the first private route table (legacy)"
   value       = var.enable_nat_gateway ? aws_route_table.private[0].id : null
 }

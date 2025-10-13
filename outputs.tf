@@ -39,6 +39,22 @@ output "ssh_connection_command" {
   value       = "ssh -i <private_key_file> ubuntu@${module.ec2_instance.elastic_ip}"
 }
 
+# Jenkins Outputs
+output "jenkins_url" {
+  description = "Jenkins URL via NGINX reverse proxy"
+  value       = module.ec2_instance.jenkins_url
+}
+
+output "jenkins_direct_url" {
+  description = "Jenkins direct URL (port 8080)"
+  value       = module.ec2_instance.jenkins_direct_url
+}
+
+output "jenkins_setup_status" {
+  description = "Jenkins setup completion status"
+  value       = module.ec2_instance.jenkins_setup_complete
+}
+
 # VPC Outputs
 output "vpc_id" {
   description = "ID of the VPC"
@@ -48,6 +64,22 @@ output "vpc_id" {
 output "vpc_cidr_block" {
   description = "CIDR block of the VPC"
   value       = module.vpc.vpc_cidr_block
+}
+
+# NAT Gateway Outputs
+output "nat_gateway_ids" {
+  description = "IDs of the NAT Gateways"
+  value       = module.vpc.nat_gateway_ids
+}
+
+output "nat_gateway_public_ips" {
+  description = "Public IPs of the NAT Gateways"
+  value       = module.vpc.nat_gateway_public_ips
+}
+
+output "nat_gateway_count" {
+  description = "Number of NAT Gateways deployed"
+  value       = length(module.vpc.nat_gateway_ids)
 }
 
 output "public_subnet_ids" {
