@@ -147,38 +147,38 @@ output "cloudfront_url" {
 # Aurora Outputs
 output "aurora_cluster_id" {
   description = "ID of the Aurora cluster"
-  value       = module.aurora_mysql.cluster_id
+  value       = var.aurora_use_postgresql ? module.aurora_postgresql[0].cluster_id : module.aurora_mysql[0].cluster_id
 }
 
 output "aurora_cluster_endpoint" {
   description = "Endpoint of the Aurora cluster"
-  value       = module.aurora_mysql.cluster_endpoint
+  value       = var.aurora_use_postgresql ? module.aurora_postgresql[0].cluster_endpoint : module.aurora_mysql[0].cluster_endpoint
 }
 
 output "aurora_cluster_reader_endpoint" {
   description = "Reader endpoint of the Aurora cluster"
-  value       = module.aurora_mysql.cluster_reader_endpoint
+  value       = var.aurora_use_postgresql ? module.aurora_postgresql[0].cluster_reader_endpoint : module.aurora_mysql[0].cluster_reader_endpoint
 }
 
 output "aurora_cluster_port" {
   description = "Port of the Aurora cluster"
-  value       = module.aurora_mysql.cluster_port
+  value       = var.aurora_use_postgresql ? module.aurora_postgresql[0].cluster_port : module.aurora_mysql[0].cluster_port
 }
 
 output "aurora_database_name" {
   description = "Name of the Aurora database"
-  value       = module.aurora_mysql.cluster_database_name
+  value       = var.aurora_use_postgresql ? module.aurora_postgresql[0].cluster_database_name : module.aurora_mysql[0].cluster_database_name
 }
 
 output "aurora_credentials_secret_arn" {
   description = "ARN of the secret containing Aurora credentials"
-  value       = module.aurora_mysql.credentials_secret_arn
+  value       = var.aurora_use_postgresql ? module.aurora_postgresql[0].credentials_secret_arn : module.aurora_mysql[0].credentials_secret_arn
   sensitive   = true
 }
 
 output "aurora_connection_command" {
-  description = "MySQL connection command"
-  value       = module.aurora_mysql.connection_command
+  description = "Database connection command (MySQL or PostgreSQL)"
+  value       = var.aurora_use_postgresql ? module.aurora_postgresql[0].connection_command : module.aurora_mysql[0].connection_command
   sensitive   = true
 }
 

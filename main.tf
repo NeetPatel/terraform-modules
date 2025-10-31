@@ -95,8 +95,9 @@ module "s3_storage" {
   price_class         = var.s3_price_class
 }
 
-# Call the Aurora module
+# Call the Aurora MySQL module (when aurora_use_postgresql is false)
 module "aurora_mysql" {
+  count  = var.aurora_use_postgresql ? 0 : 1
   source = "./modules/aurora"
 
   project_name = var.project_name
@@ -107,10 +108,37 @@ module "aurora_mysql" {
   private_subnet_ids    = module.vpc.private_subnet_ids
   ec2_security_group_id = module.ec2_instance.security_group_id
 
-  # Aurora Configuration
+  # Aurora MySQL Configuration
   database_name           = var.aurora_database_name
   master_username         = var.aurora_master_username
   engine_version          = var.aurora_engine_version
+  instance_class          = var.aurora_instance_class
+  instance_count          = var.aurora_instance_count
+  max_capacity            = var.aurora_max_capacity
+  min_capacity            = var.aurora_min_capacity
+  backup_retention_period = var.aurora_backup_retention_period
+  deletion_protection     = var.aurora_deletion_protection
+  skip_final_snapshot     = var.aurora_skip_final_snapshot
+}
+
+# Call the Aurora PostgreSQL module (when aurora_use_postgresql is true)
+module "aurora_postgresql" {
+  count  = var.aurora_use_postgresql ? 1 : 0
+  source = "./modules/aurora-postgresql"
+
+  project_name = var.project_name
+  environment  = var.environment
+
+  # VPC Configuration
+  vpc_id                = module.vpc.vpc_id
+  private_subnet_ids    = module.vpc.private_subnet_ids
+  ec2_security_group_id = module.ec2_instance.security_group_id
+
+  # Aurora PostgreSQL Configuration
+  database_name           = var.aurora_database_name
+  master_username         = var.aurora_master_username
+  engine_version          = var.aurora_postgresql_engine_version
+  parameter_group_family  = var.aurora_postgresql_parameter_group_family
   instance_class          = var.aurora_instance_class
   instance_count          = var.aurora_instance_count
   max_capacity            = var.aurora_max_capacity
@@ -283,7 +311,7 @@ module "developer_access" {
 
   # Service Configuration
   eks_cluster_name          = module.eks_cluster.cluster_name
-  aurora_cluster_identifier = module.aurora_mysql.cluster_id
+  aurora_cluster_identifier = var.aurora_use_postgresql ? module.aurora_postgresql[0].cluster_id : module.aurora_mysql[0].cluster_id
   s3_bucket_arns            = values(module.s3_storage.bucket_arns)
   ecr_repository_arns       = values(module.ecr_repositories.repository_arns)
 

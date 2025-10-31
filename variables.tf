@@ -160,16 +160,34 @@ variable "aurora_database_name" {
   default     = "devopsdb"
 }
 
+variable "aurora_use_postgresql" {
+  description = "Use Aurora PostgreSQL instead of MySQL (true for PostgreSQL, false for MySQL)"
+  type        = bool
+  default     = true
+}
+
 variable "aurora_master_username" {
   description = "Master username for Aurora"
   type        = string
-  default     = "admin"
+  default     = "postguser"
 }
 
 variable "aurora_engine_version" {
   description = "Aurora MySQL engine version"
   type        = string
   default     = "8.0.mysql_aurora.3.02.0"
+}
+
+variable "aurora_postgresql_engine_version" {
+  description = "Aurora PostgreSQL engine version (e.g., '16.6')"
+  type        = string
+  default     = "16.6"
+}
+
+variable "aurora_postgresql_parameter_group_family" {
+  description = "Parameter group family for Aurora PostgreSQL (e.g., 'aurora-postgresql16')"
+  type        = string
+  default     = "aurora-postgresql16"
 }
 
 variable "aurora_instance_class" {
