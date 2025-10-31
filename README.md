@@ -4,6 +4,41 @@ This Terraform configuration provisions a comprehensive AWS infrastructure inclu
 
 ## 🏆 **Security Rating: 9.5/10** - Production Ready
 
+## 🔄 Development Workflow
+
+Before deploying your infrastructure, run these commands to ensure code quality, validate configuration, check security, and estimate costs:
+
+```bash
+# Initialize Terraform (downloads providers and modules)
+terraform init
+
+# Format Terraform code (ensures consistent styling)
+terraform fmt
+
+# Validate Terraform configuration syntax
+terraform validate
+
+# Run security scanning with tfsec
+tfsec .
+
+# Generate execution plan (review changes before applying)
+terraform plan
+
+# Estimate infrastructure costs (requires Infracost)
+infracost breakdown --path . --show-skipped
+```
+
+### Workflow Explanation
+
+1. **`terraform init`**: Initializes the Terraform working directory by downloading required providers and modules
+2. **`terraform fmt`**: Formats your Terraform files to ensure consistent code styling
+3. **`terraform validate`**: Validates the syntax and configuration of your Terraform files
+4. **`tfsec .`**: Scans your Terraform code for security vulnerabilities and compliance issues
+5. **`terraform plan`**: Creates an execution plan showing what changes will be made
+6. **`infracost breakdown`**: Provides cost estimation for your infrastructure (optional, requires Infracost installation)
+
+**Note**: Run these commands in sequence before executing `terraform apply` to ensure your infrastructure is secure, valid, and cost-effective.
+
 ## 🏗️ Architecture
 
 ### **Core Infrastructure Components**
@@ -284,7 +319,7 @@ This Terraform configuration provisions a comprehensive AWS infrastructure inclu
     # Check AWS Config status
     aws config describe-configuration-recorder-status
     ```
-
+    
 ## ⚙️ Configuration
 
 ### Core Variables
