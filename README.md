@@ -1,6 +1,6 @@
 # DevOps Infrastructure with Terraform
 
-This Terraform configuration provisions a comprehensive AWS infrastructure including EC2 instances, VPC, S3 buckets with CloudFront CDN, Aurora MySQL Serverless database, ECR repositories, EKS cluster with ALB, Route53 DNS management, External DNS integration, and **advanced security controls** with enterprise-grade security practices and modular design.
+This Terraform configuration provisions a comprehensive AWS infrastructure including EC2 instances, VPC, S3 buckets with CloudFront CDN, Aurora PostgreSQL/MySQL Serverless database (PostgreSQL default), ECR repositories, EKS cluster with ALB, Route53 DNS management, External DNS integration, and **advanced security controls** with enterprise-grade security practices and modular design.
 
 ## 🏆 **Security Rating: 9.5/10** - Production Ready
 
@@ -45,7 +45,7 @@ infracost breakdown --path . --show-skipped
 - **EC2 Instance**: Ubuntu 22.04 LTS with security hardening and Elastic IP
 - **VPC**: Custom VPC with public/private subnets, NAT Gateway, and Internet Gateway
 - **S3 Storage**: Multiple S3 buckets with CloudFront CDN distributions
-- **Aurora Database**: MySQL Serverless v2 with automatic scaling and encryption
+- **Aurora Database**: PostgreSQL/MySQL Serverless v2 with automatic scaling and encryption (PostgreSQL default)
 - **ECR Repositories**: Multiple container registries with lifecycle policies
 - **EKS Cluster**: Kubernetes cluster with ALB
 - **Route53 DNS**: Hosted zones for domain management and DNS records
@@ -129,7 +129,11 @@ infracost breakdown --path . --show-skipped
     │   ├── main.tf
     │   ├── variables.tf
     │   └── outputs.tf
-    ├── aurora/                # Aurora database module
+    ├── aurora/                # Aurora MySQL database module
+    │   ├── main.tf
+    │   ├── variables.tf
+    │   └── outputs.tf
+    ├── aurora-postgresql/     # Aurora PostgreSQL database module
     │   ├── main.tf
     │   ├── variables.tf
     │   └── outputs.tf
@@ -247,12 +251,21 @@ infracost breakdown --path . --show-skipped
 7. **Access Aurora Database**:
    ```bash
    # Get database credentials from Secrets Manager
+   # For PostgreSQL (default):
+   aws secretsmanager get-secret-value \
+     --secret-id "devops-test-pre-prod-aurora-postgresql-credentials" \
+     --query SecretString --output text
+   
+   # For MySQL:
    aws secretsmanager get-secret-value \
      --secret-id "devops-test-pre-prod-aurora-credentials" \
      --query SecretString --output text
    
-   # Connect to Aurora (from EC2 instance)
-   mysql -h <aurora-endpoint> -u admin -p
+   # Connect to Aurora PostgreSQL (from EC2 instance)
+   psql -h <aurora-endpoint> -p 5432 -U postguser -d devopsdb
+   
+   # Connect to Aurora MySQL (from EC2 instance)
+   mysql -h <aurora-endpoint> -P 3306 -u admin -p
    ```
 
 8. **Push to ECR**:
@@ -361,9 +374,12 @@ infracost breakdown --path . --show-skipped
 
 | Variable | Description | Default |
 |----------|-------------|---------|
+| `aurora_use_postgresql` | Use Aurora PostgreSQL (true) or MySQL (false) | `true` |
 | `aurora_database_name` | Database name | `devopsdb` |
-| `aurora_master_username` | Master username | `admin` |
+| `aurora_master_username` | Master username | `postguser` |
 | `aurora_engine_version` | Aurora MySQL version | `8.0.mysql_aurora.3.02.0` |
+| `aurora_postgresql_engine_version` | Aurora PostgreSQL version | `16.6` |
+| `aurora_postgresql_parameter_group_family` | PostgreSQL parameter group family | `aurora-postgresql16` |
 | `aurora_instance_class` | Instance class | `db.serverless` |
 | `aurora_max_capacity` | Max serverless capacity | `8` |
 | `aurora_min_capacity` | Min serverless capacity | `0.5` |
@@ -479,12 +495,18 @@ s3_environment_buckets = {
 }
 
 # Aurora Configuration
+aurora_use_postgresql = true  # Default: true (PostgreSQL), false for MySQL
 aurora_database_name = "devopsdb"
-aurora_master_username = "admin"
-aurora_engine_version = "8.0.mysql_aurora.3.02.0"
+aurora_master_username = "postguser"  # Default for PostgreSQL
+aurora_engine_version = "8.0.mysql_aurora.3.02.0"  # MySQL version (used when aurora_use_postgresql = false)
+aurora_postgresql_engine_version = "16.6"  # PostgreSQL version (default: 16.6)
+aurora_postgresql_parameter_group_family = "aurora-postgresql16"  # PostgreSQL parameter group family
 aurora_instance_class = "db.serverless"
 aurora_max_capacity = 8
 aurora_min_capacity = 0.5
+aurora_backup_retention_period = 15
+aurora_deletion_protection = true
+aurora_skip_final_snapshot = false
 
 # ECR Configuration
 ecr_repository_names = [
@@ -662,7 +684,7 @@ After deployment, Terraform will output:
 - `aurora_cluster_endpoint`: Aurora cluster endpoint
 - `aurora_cluster_reader_endpoint`: Aurora reader endpoint
 - `aurora_credentials_secret_arn`: ARN of the secret containing Aurora credentials
-- `aurora_connection_command`: MySQL connection command
+- `aurora_connection_command`: Database connection command (PostgreSQL or MySQL based on configuration)
 
 ### ECR Outputs
 - `ecr_repository_urls`: ECR repository URLs
@@ -774,8 +796,31 @@ module "my_s3" {
 ```
 
 ### Aurora Module
+
+**For PostgreSQL (default):**
 ```hcl
-module "my_aurora" {
+module "my_aurora_postgresql" {
+  source = "./modules/aurora-postgresql"
+  
+  project_name = "my-project"
+  environment  = "prod"
+  
+  vpc_id = module.vpc.vpc_id
+  private_subnet_ids = module.vpc.private_subnet_ids
+  ec2_security_group_id = module.ec2.security_group_id
+  
+  database_name = "myappdb"
+  master_username = "postguser"
+  engine_version = "16.6"
+  parameter_group_family = "aurora-postgresql16"
+  max_capacity = 16
+  min_capacity = 1
+}
+```
+
+**For MySQL:**
+```hcl
+module "my_aurora_mysql" {
   source = "./modules/aurora"
   
   project_name = "my-project"
@@ -787,6 +832,7 @@ module "my_aurora" {
   
   database_name = "myappdb"
   master_username = "admin"
+  engine_version = "8.0.mysql_aurora.3.02.0"
   max_capacity = 16
   min_capacity = 1
 }
